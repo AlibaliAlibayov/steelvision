@@ -1,1 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Ultrasonic & Servo Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 320px;
+        }
+        h1 { color: #333; margin-bottom: 25px; font-size: 24px; }
+        .metric { margin: 20px 0; }
+        .label { font-size: 14px; color: #777; uppercase; font-weight: bold; }
+        .value { font-size: 32px; font-weight: bold; color: #2c3e50; margin-top: 5px; }
+        .status-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: white;
+            margin-top: 5px;
+            font-size: 20px;
+        }
+        .open { background-color: #2ecc71; }
+        .closed { background-color: #e74c3c; }
+    </style>
+</head>
+<body>
 
+    <div class="card">
+        <h1>ESP32 Control Hub</h1>
+        
+        <div class="metric">
+            <div class="label">Target Distance</div>
+            <div id="distance-val" class="value">-- cm</div>
+        </div>
+        
+        <div class="metric">
+            <div class="label">Servo Gates Status</div>
+            <div id="status-badge" class="status-badge open">UNKNOWN</div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://djjgtbylekhfrfyadkn.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqamd0YnlsZWtoZnJyZnlhZGtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDY1MDcsImV4cCI6MjA5ODA4MjUwN30.kCtFUNPFffCR5khqUeudLf-btZJhRFkND6hiyjm0Vcc";
+        
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        function updateUI(distance, status) {
+            document.getElementById('distance-val').innerText = parseFloat(distance).toFixed(1) + " cm";
+            
+            const badge = document.getElementById('status-badge');
+            badge.innerText = status;
+            if(status === "CLOSED") {
+                badge.className = "status-badge closed";
+            } else {
+                badge.className = "status-badge open";
+            }
+        }
+
+        // Fetch initial latest log
+        async function fetchLatestData() {
+            let { data, error } = await _supabase
+                .from('ultrasonic_servo_data')
+                .select('distance_cm, servo_status')
+                .order('id', { ascending: false })
+                .limit(1);
+            
+            if (data && data.length > 0) {
+                updateUI(data.distance_cm, data.servo_status);
+            }
+        }
+
+        // Listen for Realtime events
+        const channel = _supabase
+            .channel('schema-db-changes')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'ultrasonic_servo_data' },
+                (payload) => {
+                    updateUI(payload.new.distance_cm, payload.new.servo_status);
+                }
+            )
+            .subscribe();
+
+        fetchLatestData();
+    </script>
+</body>
+</html>
