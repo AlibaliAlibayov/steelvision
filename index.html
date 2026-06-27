@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Ultrasonic & Servo Dashboard</title>
+    <title>ESP32 Ultrasonic Control Hub</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
@@ -23,41 +23,54 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             text-align: center;
             width: 350px;
-            transition: all 0.3s ease;
         }
         h1 { color: #333; margin-bottom: 25px; font-size: 24px; }
         .metric { margin: 20px 0; }
         .label { font-size: 14px; color: #777; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
         .value { font-size: 32px; font-weight: bold; color: #2c3e50; margin-top: 5px; }
         
+        /* Virtual LED Indicator Styling */
+        .led-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 25px 0;
+        }
+        .led-light {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-bottom: 8px;
+            transition: all 0.3s ease;
+        }
+        .led-green {
+            background-color: #2ecc71;
+            box-shadow: 0 0 15px #2ecc71, inset 0 0 10px rgba(255,255,255,0.5);
+        }
+        .led-red {
+            background-color: #e74c3c;
+            box-shadow: 0 0 20px #e74c3c, inset 0 0 10px rgba(255,255,255,0.5);
+            animation: blink 1s infinite alternate;
+        }
+
         /* Safety Banner Styles */
         .safety-banner {
             display: block;
-            padding: 15px;
-            border-radius: 10px;
+            padding: 12px;
+            border-radius: 8px;
             font-weight: bold;
             color: white;
-            margin-top: 20px;
-            font-size: 18px;
-            letter-spacing: 1px;
-            transition: all 0.4s ease;
+            font-size: 16px;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
         }
-        
-        .safe { 
-            background-color: #2ecc71; 
-            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
-        }
-        
-        .caution { 
-            background-color: #e74c3c; 
-            box-shadow: 0 4px 10px rgba(231, 76, 60, 0.4);
-            animation: pulse 1.5s infinite;
-        }
+        .safe-banner { background-color: #27ae60; }
+        .caution-banner { background-color: #c0392b; }
 
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.03); box-shadow: 0 4px 20px rgba(231, 76, 60, 0.6); }
-            100% { transform: scale(1); }
+        @keyframes blink {
+            from { opacity: 1; }
+            to { opacity: 0.7; }
         }
     </style>
 </head>
@@ -70,31 +83,46 @@
             <div class="label">Target Distance</div>
             <div id="distance-val" class="value">-- cm</div>
         </div>
+
+        <div class="led-container">
+            <div id="web-led" class="led-light led-green"></div>
+            <div id="led-label" class="label" style="font-size: 11px;">System Stable</div>
+        </div>
         
         <div class="metric">
-            <div class="label">System Safety Status</div>
-            <div id="safety-status" class="safety-banner safe">LOADING...</div>
+            <div id="safety-status" class="safety-banner safe-banner">SAFE (STABLE)</div>
         </div>
     </div>
 
     <script>
-        // Credentials pulled from your active Supabase session
-        const SUPABASE_URL = "https://djjgtbylekhfrfyadkn.supabase.co"; [cite: 63]
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqamd0YnlsZWtoZnJyZnlhZGtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDY1MDcsImV4cCI6MjA5ODA4MjUwN30.kCtFUNPFffCR5khqUeudLf-btZJhRFkND6hiyjm0Vcc"; [cite: 62]
+        const SUPABASE_URL = "https://djjgtbylekhfrfyadkn.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqamd0YnlsZWtoZnJyZnlhZGtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDY1MDcsImV4cCI6MjA5ODA4MjUwN30.kCtFUNPFffCR5khqUeudLf-btZJhRFkND6hiyjm0Vcc";
         
-        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); [cite: 24]
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         function updateUI(distance, status) {
-            document.getElementById('distance-val').innerText = parseFloat(distance).toFixed(1) + " cm";
+            const numericDistance = parseFloat(distance);
+            document.getElementById('distance-val').innerText = numericDistance.toFixed(1) + " cm";
             
+            const led = document.getElementById('web-led');
+            const ledLabel = document.getElementById('led-label');
             const banner = document.getElementById('safety-status');
             
-            if(status === "CLOSED") {
+            // Logic threshold for < 15 cm
+            if (numericDistance < 15.0) {
+                // Turn Virtual LED Red
+                led.className = "led-light led-red";
+                ledLabel.innerText = "LED: RED (CLOSE TARGET)";
+                
                 banner.innerText = "⚠️ CAUTION: OBJECT DETECTED";
-                banner.className = "safety-banner caution";
+                banner.className = "safety-banner caution-banner";
             } else {
+                // Turn Virtual LED Green
+                led.className = "led-light led-green";
+                ledLabel.innerText = "LED: GREEN (CLEAR)";
+                
                 banner.innerText = "SAFE (STABLE)";
-                banner.className = "safety-banner safe";
+                banner.className = "safety-banner safe-banner";
             }
         }
 
