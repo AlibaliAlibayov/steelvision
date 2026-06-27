@@ -22,23 +22,43 @@
             border-radius: 15px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             text-align: center;
-            width: 320px;
+            width: 350px;
+            transition: all 0.3s ease;
         }
         h1 { color: #333; margin-bottom: 25px; font-size: 24px; }
         .metric { margin: 20px 0; }
-        .label { font-size: 14px; color: #777; uppercase; font-weight: bold; }
+        .label { font-size: 14px; color: #777; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
         .value { font-size: 32px; font-weight: bold; color: #2c3e50; margin-top: 5px; }
-        .status-badge {
-            display: inline-block;
-            padding: 8px 20px;
-            border-radius: 20px;
+        
+        /* Safety Banner Styles */
+        .safety-banner {
+            display: block;
+            padding: 15px;
+            border-radius: 10px;
             font-weight: bold;
             color: white;
-            margin-top: 5px;
-            font-size: 20px;
+            margin-top: 20px;
+            font-size: 18px;
+            letter-spacing: 1px;
+            transition: all 0.4s ease;
         }
-        .open { background-color: #2ecc71; }
-        .closed { background-color: #e74c3c; }
+        
+        .safe { 
+            background-color: #2ecc71; 
+            box-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+        }
+        
+        .caution { 
+            background-color: #e74c3c; 
+            box-shadow: 0 4px 10px rgba(231, 76, 60, 0.4);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.03); box-shadow: 0 4px 20px rgba(231, 76, 60, 0.6); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -52,30 +72,33 @@
         </div>
         
         <div class="metric">
-            <div class="label">Servo Gates Status</div>
-            <div id="status-badge" class="status-badge open">UNKNOWN</div>
+            <div class="label">System Safety Status</div>
+            <div id="safety-status" class="safety-banner safe">LOADING...</div>
         </div>
     </div>
 
     <script>
-        const SUPABASE_URL = "https://djjgtbylekhfrfyadkn.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqamd0YnlsZWtoZnJyZnlhZGtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDY1MDcsImV4cCI6MjA5ODA4MjUwN30.kCtFUNPFffCR5khqUeudLf-btZJhRFkND6hiyjm0Vcc";
+        // Credentials pulled from your active Supabase session
+        const SUPABASE_URL = "https://djjgtbylekhfrfyadkn.supabase.co"; [cite: 63]
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqamd0YnlsZWtoZnJyZnlhZGtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDY1MDcsImV4cCI6MjA5ODA4MjUwN30.kCtFUNPFffCR5khqUeudLf-btZJhRFkND6hiyjm0Vcc"; [cite: 62]
         
-        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); [cite: 24]
 
         function updateUI(distance, status) {
             document.getElementById('distance-val').innerText = parseFloat(distance).toFixed(1) + " cm";
             
-            const badge = document.getElementById('status-badge');
-            badge.innerText = status;
+            const banner = document.getElementById('safety-status');
+            
             if(status === "CLOSED") {
-                badge.className = "status-badge closed";
+                banner.innerText = "⚠️ CAUTION: OBJECT DETECTED";
+                banner.className = "safety-banner caution";
             } else {
-                badge.className = "status-badge open";
+                banner.innerText = "SAFE (STABLE)";
+                banner.className = "safety-banner safe";
             }
         }
 
-        // Fetch initial latest log
+        // Fetch initial latest log on page load
         async function fetchLatestData() {
             let { data, error } = await _supabase
                 .from('ultrasonic_servo_data')
@@ -88,7 +111,7 @@
             }
         }
 
-        // Listen for Realtime events
+        // Listen for Realtime events from ESP32
         const channel = _supabase
             .channel('schema-db-changes')
             .on(
